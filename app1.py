@@ -1,6 +1,7 @@
 import streamlit as st
 from PyPDF2 import PdfReader
 import pandas as pd
+import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -16,6 +17,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Predefined skills list (you can expand it)
+SKILL_LIST = [
+    "Python", "Java", "JavaScript", "C++", "C#", "SQL", "Machine Learning", "Data Science",
+    "Deep Learning", "NLP", "Django", "Flask", "Spring Boot", "React", "Angular", "Node.js",
+    "HTML", "CSS", "Docker", "Kubernetes", "Cloud Computing", "AWS", "Azure", "GCP",
+    "REST API", "Microservices", "Git", "DevOps", "Agile", "Scrum"
+]
+
 # Function to extract text from PDF
 def extract_text_from_pdf(file):
     pdf = PdfReader(file)
@@ -25,6 +34,14 @@ def extract_text_from_pdf(file):
         if page_text:
             text += page_text + "\n"
     return text.strip()
+
+# Function to extract skills from a given text
+def extract_skills(text):
+    found_skills = set()
+    for skill in SKILL_LIST:
+        if re.search(rf"\b{re.escape(skill)}\b", text, re.IGNORECASE):
+            found_skills.add(skill)
+    return found_skills
 
 # Function to rank resumes based on job description
 def rank_resumes(job_description, resumes):
@@ -39,7 +56,7 @@ def rank_resumes(job_description, resumes):
     return cosine_similarities
 
 # Page Title
-st.markdown("<h1 class='highlight'>📄 AI Resume Screening & Candidate Ranking System </h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='highlight'>📄 AI Resume Screening & Candidate Ranking</h1>", unsafe_allow_html=True)
 
 # Layout: Divide into two columns
 col1, col2 = st.columns(2)
@@ -60,6 +77,11 @@ if uploaded_files and job_description.strip():
 
     resumes = []
     file_names = []
+    skill_matches = []
+    skill_missing = []
+
+    # Extract skills from job description
+    required_skills = extract_skills(job_description)
 
     # Progress Bar
     progress = st.progress(0)
@@ -70,6 +92,16 @@ if uploaded_files and job_description.strip():
         if text:
             resumes.append(text)
             file_names.append(file.name)
+
+            # Extract skills from resume
+            resume_skills = extract_skills(text)
+            
+            # Find matched and unmatched skills
+            matched_skills = resume_skills.intersection(required_skills)
+            missing_skills = required_skills - matched_skills
+
+            skill_matches.append(", ".join(matched_skills) if matched_skills else "None")
+            skill_missing.append(", ".join(missing_skills) if missing_skills else "None")
         else:
             st.warning(f"⚠️ Could not extract text from {file.name}. Skipping...")
 
@@ -83,11 +115,15 @@ if uploaded_files and job_description.strip():
         # Display results in a styled DataFrame
         st.success("✅ Resume ranking completed!")
 
-        results = pd.DataFrame({"Resume": file_names, "Score": scores})
+        results = pd.DataFrame({
+            "Resume": file_names,
+            "Score": scores,
+            "Matched Skills": skill_matches,   # Skills found in the resume
+            "Missing Skills": skill_missing    # Skills required but missing
+        })
         results = results.sort_values(by="Score", ascending=False)
 
         # Use Streamlit's dataframe display for better UI
         st.dataframe(results.style.format({"Score": "{:.2f}"}))
     else:
         st.error("🚨 No valid resumes found. Please upload PDFs with readable text.")
-
